@@ -1,22 +1,30 @@
 
-Deep Learning Türkiye Topluluğu için Merve Ayyüce Kızrak tarafından hazırlanmıştır.
-       ...
+"""
+Deep Learning Türkiye Topluluğu için Merve Ayyüce Kızrak tarafından hazırlanmıştır. (www.ayyucekizrak.com)
+
 Hinton’ın “Dynamic Routing Between Capsules” makalesindeki CapsNet algoritmasının Keras Uygulamasıdır.
 Geçerli sürümü TensorFlow’da hazırlanmıştır. Keras sürümünden farklı sürümlere kolaylıkla dönüştürülüp yeniden yazılabilir.
-Amaç: Kapsül ağının el yazısı rakamları tanımaktaki performansını değerlendirmek.
-Veriseti: MNIST (http://yann.lecun.com/exdb/mnist/)
-Algoritma: Kapsül Ağları (Capsule Networks-CapsNet)
-Microsoft Azure Notebook: https://notebooks.azure.com/deeplearningturkiye/libraries/pratik-derin-ogrenme/html/kapsul_rakam_tanima_CapsNet-Keras_MNIST.py
+
+Amaç                        :Kapsül ağının el yazısı rakamları tanımaktaki performansını değerlendirmek.
+Kaynak                      :https://arxiv.org/pdf/1710.09829.pdf (Dynamic Routing Between Capsule)
+Veriseti                    :MNIST (http://yann.lecun.com/exdb/mnist/)
+Algoritma                   :Kapsül Ağları (Capsule Networks-CapsNet)
+Microsoft Azure Notebook    :https://notebooks.azure.com/deeplearningturkiye/libraries/pratik-derin-ogrenme/html/kapsul_rakam_tanima_CapsNet-Keras_MNIST.py
+
 Kullanım:
        python CapsNet.py
        python CapsNet.py --epochs 50
        python CapsNet.py --epochs 50 --num_routing 3
-       ... ...  
+       ... ...
+       
 Sonuç:
-    Validasyon Başarımı > 20 epoch sonrasında %99.5. 
-     50 epoch sonrasında %99.66’ya yükselmektedir.
-    Her epoch işlemi tek bir GTX1070 GPU kart üzerinde 110 saniye sürmektedir.
-    """
+       Validasyon Başarımı > 20 epoch sonrasında %99.5. 
+       50 epoch sonrasında %99.66’ya yükselmektedir.
+       Her epoch işlemi tek bir GTX1070 GPU kart üzerinde 110 saniye sürmektedir.
+
+    
+"""
+
 import numpy as np
 from keras import layers, models, optimizers
 from keras import backend as K
@@ -24,19 +32,25 @@ from keras.utils import to_categorical
 from capsulelayers import CapsuleLayer, PrimaryCap, Length, Mask
 
 K.set_image_data_format('channels_last')
-MNIST veriseti için Kapsül Ağları.
-    :param input_shape: veri şekli, 3d, [genişlik, yükseklik, kanal]
-    :param n_class: sınıf sayısı
-    :param num_routing: dinamik yönlendirme (dynamic routing) iterasyon sayısı
-    :return: iki Keras model, birincisi eğitim için, ikincisi değerlendirme için (evalaution).
+
+
+def CapsNet(input_shape, n_class, num_routing):
+    """
+    MNIST Veriseti için Kapsül Ağları.
+    
+       :param input_shape: veri şekli, 3d, [genişlik, yükseklik, kanal]
+       :param n_class: sınıf sayısı
+       :param num_routing: dinamik yönlendirme (dynamic routing) iterasyon sayısı
+       :return: iki Keras model, birincisi eğitim için, ikincisi değerlendirme için (evalaution).
             `eval_model` aynı zamanda eğitim için de kullanılabilir.
+
     """
     x = layers.Input(shape=input_shape)
 
     # Katman 1: Geleneksel Evrişimli Sinir Ağı Katmanı (Conv2D)
     conv1 = layers.Conv2D(filters=256, kernel_size=9, strides=1, padding='valid', activation='relu', name='conv1')(x)
 
-    # Katman 2: Conv2D katmanı ile ezme (squash) aktivasyonu, [None, num_capsule, dim_capsule]’e yeniden şekil veriyoruz. 
+    # Katman 2: Conv2D katmanı ile ezme (squash) aktivasyonu, [None, num_capsule, dim_capsule]’e yeniden şekil veriliyor. 
     primarycaps = PrimaryCap(conv1, dim_capsule=8, n_channels=32, kernel_size=9, strides=2, padding='valid')
 
     # Katman 3: Kapsül Katmanı. Dinamik Yönlendirme algoritması burada çalışıyor.
@@ -45,6 +59,7 @@ MNIST veriseti için Kapsül Ağları.
 
     # Katman 4: Her kapsülün uzunluğunu yeniden düzenleyen yardımcı bir katmandır. Doğru etiketle eşleşmesi için bu işlem yapılır.
     # Eğer Tensorflow kullanıyorsanız bu işleme gerek yoktur. :)
+
     out_caps = Length(name='capsnet')(digitcaps)
 
     # Kodçözücü Ağ.
@@ -52,7 +67,7 @@ MNIST veriseti için Kapsül Ağları.
     masked_by_y = Mask()([digitcaps, y])  # Doğru etiket, kapsül katmanın çıkışını maskelemek için kullanılır (Eğitim için).
     masked = Mask()(digitcaps)  # Maske, kapsülün maksimal uzunluğu ile kullanılır (Kestirim için). 
 
-    # Eğitim ve Kestirimde Kodçözücü modelin paylaşımı
+    # Eğitim ve Kestirimde Kodçözücü Modelin Paylaşımı
     decoder = models.Sequential(name='decoder')
     decoder.add(layers.Dense(512, activation='relu', input_dim=16*n_class))
     decoder.add(layers.Dense(1024, activation='relu'))
@@ -67,10 +82,11 @@ MNIST veriseti için Kapsül Ağları.
 
 def margin_loss(y_true, y_pred):
     """
-    Denklem(4) için hata değeri. y_true[i, :] sadece `1` içermediğinde, bu kayıp çok uzun çalışmalıdır. 
-    :param y_true: [None, n_classes]
-    :param y_pred: [None, num_capsule]
-    :return: skaler kayıp değeri.
+    Makaledeki Denklem(4) için hata değeri. y_true[i, :] sadece `1` içermediğinde, bu kayıp hesabı çalışır. (Test yok)
+              :param y_true: [None, n_classes]
+              :param y_pred: [None, num_capsule]
+              :return: Skaler kayıp değeri.
+.
     """
     L = y_true * K.square(K.maximum(0., 0.9 - y_pred)) + \
         0.5 * (1 - y_true) * K.square(K.maximum(0., y_pred - 0.1))
@@ -80,16 +96,17 @@ def margin_loss(y_true, y_pred):
 
 def train(model, data, args):
     """
-Kapsül Ağının Eğitilmesi    
-    :param model: CapsNet (Kapsül Ağ) Modeli 
-    :param data: eğitim ve test verisinden bir grup içerir, örneğin; `((x_train, y_train), (x_test, y_test))`
-    :param args: bağımsız değişkenler
-    :return: eğitilmiş model
+   Kapsül Ağının Eğitimi    
+              :param model:CapsNet (Kapsül Ağ) Modeli 
+              :param data:Eğitim ve test verisinden bir grup içerir, örneğin; `((x_train, y_train), (x_test, y_test))`
+              :param args:Bağımsız değişkenler
+              :return :Eğitilmiş model
+
     """
-    # verilerin kullanıma hazır hale gelmesi
+    # Verilerin Kullanıma Hazır Hale Gelir
     (x_train, y_train), (x_test, y_test) = data
 
-    # geri çağırmalar
+    # Geri Çağırmalar
     log = callbacks.CSVLogger(args.save_dir + '/log.csv')
     tb = callbacks.TensorBoard(log_dir=args.save_dir + '/tensorboard-logs',
                                batch_size=args.batch_size, histogram_freq=args.debug)
@@ -97,19 +114,20 @@ Kapsül Ağının Eğitilmesi
                                            save_best_only=True, save_weights_only=True, verbose=1)
     lr_decay = callbacks.LearningRateScheduler(schedule=lambda epoch: args.lr * (0.9 ** epoch))
 
-    # Modelin derlenmesi
+    # Modelin Derlenir
     model.compile(optimizer=optimizers.Adam(lr=args.lr),
                   loss=[margin_loss, 'mse'],
                   loss_weights=[1., args.lam_recon],
                   metrics={'capsnet': 'accuracy'})
 
     """
-    # Veri Büyütme yapmadan modelin eğitimi:
+    # Veri Büyütme Yapmadan Modelin Eğitimi:
     model.fit([x_train, y_train], [y_train, x_train], batch_size=args.batch_size, epochs=args.epochs,
               validation_data=[[x_test, y_test], [y_test, x_test]], callbacks=[log, tb, checkpoint, lr_decay])
+
     """
 
-    # Başlangıç: Veri Büyütme yaparak Modelin eğitimi ---------------------------------------------------------------------#
+    # Başlangıç: Veri Büyütme Yaparak Modelin Eğitimi ---------------------------------------------------------------------#
     def train_generator(x, y, batch_size, shift_fraction=0.):
         train_datagen = ImageDataGenerator(width_shift_range=shift_fraction,
                                            height_shift_range=shift_fraction)  # MNIST veri setini 2 piksel yukarı kaydırır
@@ -118,13 +136,13 @@ Kapsül Ağının Eğitilmesi
             x_batch, y_batch = generator.next()
             yield ([x_batch, y_batch], [y_batch, x_batch])
 
-    # Veri Büyütme yaparak Modelin Eğitimi. Eğer shift_fraction=0., Bu durumda da veri büyütme olmaz.
+    # Veri Büyütme Yaparak Modelin Eğitimi. Eğer shift_fraction=0., Bu durumda da veri büyütme olmaz.
     model.fit_generator(generator=train_generator(x_train, y_train, args.batch_size, args.shift_fraction),
                         steps_per_epoch=int(y_train.shape[0] / args.batch_size),
                         epochs=args.epochs,
                         validation_data=[[x_test, y_test], [y_test, x_test]],
                         callbacks=[log, tb, checkpoint, lr_decay])
-    # Son: Veri Büyütme Yaparak Modelin Eğitilmesi -----------------------------------------------------------------------#
+    # Son: Veri Büyütme Yaparak Modelin Eğitimi -----------------------------------------------------------------------#
 
     model.save_weights(args.save_dir + '/trained_model.h5')
     print('Trained model saved to \'%s/trained_model.h5\'' % args.save_dir)
@@ -156,7 +174,7 @@ def test(model, data):
 
 
 def load_mnist():
-    # Veri, eğitim ve test setleri arasında bölünüp karıştırılır
+    # Veri Önce Karıştırılıp (shuffled) Sonra Eğitim ve Test Setleri Olarak Ayrılıyor (split)
     from keras.datasets import mnist
     (x_train, y_train), (x_test, y_test) = mnist.load_data()
 
@@ -173,7 +191,7 @@ if __name__ == "__main__":
     from keras import callbacks
     from keras.utils.vis_utils import plot_model
 
-    # Hiperparametrelerin ayarlanması
+    # Hiperparametrelerin Ayarlanması
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument('--batch_size', default=100, type=int)
@@ -181,7 +199,7 @@ if __name__ == "__main__":
     parser.add_argument('--lam_recon', default=0.392, type=float)  # 784 * 0.0005, makalede SE hesaplanmıştır, burada MSE hesaplanıyor
     parser.add_argument('--num_routing', default=3, type=int)  # yönlendirme sayısı > 0 olmalı
     parser.add_argument('--shift_fraction', default=0.1, type=float)
-    parser.add_argument('--debug', default=0, type=int)  # debug>0 TensorFlowBoard’ta ağırlıklar tutulur.
+    parser.add_argument('--debug', default=0, type=int)  # debug>0 TensorBoard’ta ağırlıklar tutulur.
     parser.add_argument('--save_dir', default='./result')
     parser.add_argument('--is_training', default=1, type=int)
     parser.add_argument('--weights', default=None)
@@ -210,4 +228,3 @@ if __name__ == "__main__":
         if args.weights is None:
             print('No weights are provided. Will test using random initialized weights.')
         test(model=eval_model, data=(x_test, y_test))
-
