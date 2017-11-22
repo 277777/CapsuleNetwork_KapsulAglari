@@ -1,6 +1,6 @@
 
 """
-Deep Learning Türkiye Topluluğu için Merve Ayyüce Kızrak tarafından hazırlanmıştır. (www.ayyucekizrak.com)
+Deep Learning Türkiye Topluluğu için Merve Ayyüce Kızrak tarafından hazırlanmıştır. (http://www.ayyucekizrak.com/)
 
 Hinton’ın “Dynamic Routing Between Capsules” makalesindeki CapsNet algoritmasının Keras Uygulamasıdır.
 Geçerli sürümü TensorFlow’da hazırlanmıştır. Keras sürümünden farklı sürümlere kolaylıkla dönüştürülüp yeniden yazılabilir.
