@@ -103,6 +103,7 @@ def train(model, data, args):
               :return :Eğitilmiş model
 
     """
+ 
     # Verilerin Kullanıma Hazır Hale Gelir
     (x_train, y_train), (x_test, y_test) = data
 
@@ -142,6 +143,7 @@ def train(model, data, args):
                         epochs=args.epochs,
                         validation_data=[[x_test, y_test], [y_test, x_test]],
                         callbacks=[log, tb, checkpoint, lr_decay])
+  
     # Son: Veri Büyütme Yaparak Modelin Eğitimi -----------------------------------------------------------------------#
 
     model.save_weights(args.save_dir + '/trained_model.h5')
