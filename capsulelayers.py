@@ -28,11 +28,12 @@ class Length(layers.Layer):
 
 class Mask(layers.Layer):
     """
-    shape=[None, num_capsule, dim_vector]  Bu Tensor maske ya maksimum uzunluğuyla kapsül ya da ek bir giriş maskesidir.
+    shape=[None, num_capsule, dim_vector]  Bu Tensor maske ya maksimum uzunluğuyla kapsül ya da ek bir giriş filtresidir.
     
     Except the max-length capsule (or specified capsule), all vectors are masked to zeros. Then flatten the
     masked Tensor.
-    For example:
+    
+    Örneğin:
         ```
         x = keras.layers.Input(shape=[8, 3, 2])  # batch_size=8,her bir iterasyonda "8" resim alınsın 
                                                    her örnek 3 kapsül içersin  dim_vector=2
