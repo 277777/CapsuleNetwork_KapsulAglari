@@ -14,10 +14,10 @@ from keras import initializers, layers
 
 class Length(layers.Layer):
     """
-    Compute the length of vectors. This is used to compute a Tensor that has the same shape with y_true in margin_loss.
-    Using this layer as model's output can directly predict labels by using `y_pred = np.argmax(model.predict(x), 1)`
-    inputs: shape=[None, num_vectors, dim_vector]
-    output: shape=[None, num_vectors]
+    Vektör uzunluklarının hesaplanır. Bu, hata değerindeki (margin_loss) y_true ile aynı boyutta Tensor hesaplamak için kullanılır.
+    Bu katmanı kullanarak modelin çıkışı direkt olarak etiketleri kestirebilir. ( `y_pred = np.argmax(model.predict(x), 1)` ) kullanarak.
+    girişler    : shape=[None, num_vectors, dim_vector]
+    çıkış       : shape=[None, num_vectors]
     """
     def call(self, inputs, **kwargs):
         return K.sqrt(K.sum(K.square(inputs), -1))
@@ -28,46 +28,49 @@ class Length(layers.Layer):
 
 class Mask(layers.Layer):
     """
-    Mask a Tensor with shape=[None, num_capsule, dim_vector] either by the capsule with max length or by an additional 
-    input mask. Except the max-length capsule (or specified capsule), all vectors are masked to zeros. Then flatten the
+    shape=[None, num_capsule, dim_vector]  Bu Tensor maske ya maksimum uzunluğuyla kapsül ya da ek bir giriş maskesidir.
+    
+    Except the max-length capsule (or specified capsule), all vectors are masked to zeros. Then flatten the
     masked Tensor.
     For example:
         ```
-        x = keras.layers.Input(shape=[8, 3, 2])  # batch_size=8, each sample contains 3 capsules with dim_vector=2
-        y = keras.layers.Input(shape=[8, 3])  # True labels. 8 samples, 3 classes, one-hot coding.
+        x = keras.layers.Input(shape=[8, 3, 2])  # batch_size=8,her bir iterasyonda "8" resim alınsın 
+                                                   her örnek 3 kapsül içersin  dim_vector=2
+        y = keras.layers.Input(shape=[8, 3])  # Doğru etiketler. 8 örnek, 3 sınıf, (one-hot coding).
         out = Mask()(x)  # out.shape=[8, 6]
-        # or
-        out2 = Mask()([x, y])  # out2.shape=[8,6]. Masked with true labels y. Of course y can also be manipulated.
-        ```
+        # ya da
+        out2 = Mask()([x, y])  # out2.shape=[8,6]. y'nin doğru etiketleri ile maskelenir. Tabi ki y manipüle edilebilir.
+        `
     """
     def call(self, inputs, **kwargs):
-        if type(inputs) is list:  # true label is provided with shape = [batch_size, n_classes], i.e. one-hot code.
+        if type(inputs) is list:  # doğru etiket shape = [batch_size, n_classes], ile sağlanı.  (örneğin: one-hot code.)
             assert len(inputs) == 2
             inputs, mask = inputs
             mask = K.expand_dims(mask, -1)
-        else:  # if no true label, mask by the max length of capsules. Mainly used for prediction
-            # compute lengths of capsules
+        else:  # eğer doğru etiket yoksa, kapsüller maksimum uzunluklarıyla maskelenir. Temel olrak kestirim için kullanılır.
+            # kapsül uzunluğu hesaplanır.
             x = K.sqrt(K.sum(K.square(inputs), -1, True))
-            # Enlarge the range of values in x to make max(new_x[i,:])=1 and others << 0
+            # x aralığını max(new_x[i,:])=1 ve diğerleri << 0 yapmak için büyütür. 
             x = (x - K.max(x, 1, True)) / K.epsilon() + 1
-            # the max value in x clipped to 1 and other to 0. Now `mask` is one-hot coding.
+            # x'teki bu maksimum değer 1 yapılır diğerleri 0 yapılır.
+            # the max value in x clipped to 1 and other to 0. Böylece `maske` bir one-hot coding olur.
             mask = K.clip(x, 0, 1)
 
-        return K.batch_flatten(inputs * mask)  # masked inputs, shape = [None, num_capsule * dim_capsule]
+        return K.batch_flatten(inputs * mask)  # maskelenmiş girişler, shape = [None, num_capsule * dim_capsule]
 
     def compute_output_shape(self, input_shape):
-        if type(input_shape[0]) is tuple:  # true label provided
+        if type(input_shape[0]) is tuple:  # deoğru değerler sağlanır
             return tuple([None, input_shape[0][1] * input_shape[0][2]])
-        else:  # no true label provided
+        else:  # doğru olmayan değerler sağlanır
             return tuple([None, input_shape[1] * input_shape[2]])
 
 
 def squash(vectors, axis=-1):
     """
-    The non-linear activation used in Capsule. It drives the length of a large vector to near 1 and small vector to 0
-    :param vectors: some vectors to be squashed, N-dim tensor
-    :param axis: the axis to squash
-    :return: a Tensor with same shape as input vectors
+    Kapsülde lineer olmayan aktivasyon kullanılır. Böylece büyük vektörün uzunluğu 1'e küçük vektör 0'a yaklaşır.
+    :param vectors: bazı vektörler ezilir (squashed), N-dim tensor
+    :param axis: eksen ezilir (squash)
+    :return: giriş vektörleri ile aynı uzunluklu bir Tensor
     """
     s_squared_norm = K.sum(K.square(vectors), axis, keepdims=True)
     scale = s_squared_norm / (1 + s_squared_norm) / K.sqrt(s_squared_norm + K.epsilon())
@@ -76,14 +79,15 @@ def squash(vectors, axis=-1):
 
 class CapsuleLayer(layers.Layer):
     """
-    The capsule layer. It is similar to Dense layer. Dense layer has `in_num` inputs, each is a scalar, the output of the 
-    neuron from the former layer, and it has `out_num` output neurons. CapsuleLayer just expand the output of the neuron
-    from scalar to vector. So its input shape = [None, input_num_capsule, input_dim_capsule] and output shape = \
-    [None, num_capsule, dim_capsule]. For Dense Layer, input_dim_capsule = dim_capsule = 1.
+    Kapsül Katmanı. Dense katmanıyla benzerdir. Dense katmanı `in_num` girişlere sahiptir. Her biri skalardır. önceki katmandan 
+    gelen nöron çıkıştır. Çıkış nöronları `out_num` ile gösterilir. Kapsül katmanı (CapsuleLayer) çıkış nöronlarının genişletilmiş
+    skalar bir vektör halidir.
+    Giriş: shape = [None, input_num_capsule, input_dim_capsule] and output shape = \
+    [None, num_capsule, dim_capsule]. Dense katman için, input_dim_capsule = dim_capsule = 1.
     
-    :param num_capsule: number of capsules in this layer
-    :param dim_capsule: dimension of the output vectors of the capsules in this layer
-    :param num_routing: number of iterations for the routing algorithm
+    :param num_capsule: her katmandaki kapsül sayısı 
+    :param dim_capsule: ilgili katmandaki kapsülün çıkış vektörünün boyutu 
+    :param num_routing: yönlendirme (routing) algoritmasının iterasyon sayısı
     """
     def __init__(self, num_capsule, dim_capsule, num_routing=3,
                  kernel_initializer='glorot_uniform',
@@ -95,11 +99,11 @@ class CapsuleLayer(layers.Layer):
         self.kernel_initializer = initializers.get(kernel_initializer)
 
     def build(self, input_shape):
-        assert len(input_shape) >= 3, "The input Tensor should have shape=[None, input_num_capsule, input_dim_capsule]"
+        assert len(input_shape) >= 3, "Input Tensorunun olması gereken boyutu shape=[None, input_num_capsule, input_dim_capsule]"
         self.input_num_capsule = input_shape[1]
         self.input_dim_capsule = input_shape[2]
 
-        # Transform matrix
+        # Matris Dönüştürme
         self.W = self.add_weight(shape=[self.num_capsule, self.input_num_capsule,
                                         self.dim_capsule, self.input_dim_capsule],
                                  initializer=self.kernel_initializer,
@@ -112,7 +116,7 @@ class CapsuleLayer(layers.Layer):
         # inputs_expand.shape=[None, 1, input_num_capsule, input_dim_capsule]
         inputs_expand = K.expand_dims(inputs, 1)
 
-        # Replicate num_capsule dimension to prepare being multiplied by W
+        # W değerleriyle çarpmaya hazırlamak için num_capsule boyutunu çoğaltır  
         # inputs_tiled.shape=[None, num_capsule, input_num_capsule, input_dim_capsule]
         inputs_tiled = K.tile(inputs_expand, [1, self.num_capsule, 1, 1])
 
