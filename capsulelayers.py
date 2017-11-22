@@ -1,5 +1,5 @@
 """
-Deep Learning Türkiye Topluluğu için Merve Ayyüce Kızrak tarafından hazırlanmıştır. (www.ayyucekizrak.com)
+Deep Learning Türkiye Topluluğu için Merve Ayyüce Kızrak tarafından hazırlanmıştır. (http://www.ayyucekizrak.com/)
 
 Bazı temel katmanlar bir Kapsül Ağ oluşturmak için kullanılır. Kapsül ağ modeli (CapsNet) oluşturmak için kullanılan katmanlar 
 farklı veri setleri üzerinde de kullanılabilir, sadece MNIST seti için tasarlanmamıştır.
