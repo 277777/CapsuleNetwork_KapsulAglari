@@ -30,8 +30,8 @@ class Mask(layers.Layer):
     """
     shape=[None, num_capsule, dim_vector]  Bu Tensor maske ya maksimum uzunluğuyla kapsül ya da ek bir giriş filtresidir.
     
-    Except the max-length capsule (or specified capsule), all vectors are masked to zeros. Then flatten the
-    masked Tensor.
+    Maksimum uzunluklu kapsül hariç (yada belirtilen kapsül hariç), diğer tüm vektörler 0'a filtrelenir. 
+    Sonra filtrelenmiş tüm Tensörler düzgünleştirilir (flatten).
     
     Örneğin:
         ```
@@ -40,7 +40,7 @@ class Mask(layers.Layer):
         y = keras.layers.Input(shape=[8, 3])  # Doğru etiketler. 8 örnek, 3 sınıf, (one-hot coding).
         out = Mask()(x)  # out.shape=[8, 6]
         # ya da
-        out2 = Mask()([x, y])  # out2.shape=[8,6]. y'nin doğru etiketleri ile maskelenir. Tabi ki y manipüle edilebilir.
+        out2 = Mask()([x, y])  # out2.shape=[8,6]. y'nin doğru etiketleri ile filtrelenir. Tabi ki y manipüle edilebilir.
         `
     """
     def call(self, inputs, **kwargs):
@@ -48,16 +48,16 @@ class Mask(layers.Layer):
             assert len(inputs) == 2
             inputs, mask = inputs
             mask = K.expand_dims(mask, -1)
-        else:  # eğer doğru etiket yoksa, kapsüller maksimum uzunluklarıyla maskelenir. Temel olrak kestirim için kullanılır.
+        else:  # eğer doğru etiket yoksa, kapsüller maksimum uzunluklarıyla filtrelenir. Temel olrak kestirim için kullanılır.
             # kapsül uzunluğu hesaplanır.
             x = K.sqrt(K.sum(K.square(inputs), -1, True))
             # x aralığını max(new_x[i,:])=1 ve diğerleri << 0 yapmak için büyütür. 
             x = (x - K.max(x, 1, True)) / K.epsilon() + 1
             # x'teki bu maksimum değer 1 yapılır diğerleri 0 yapılır.
-            # the max value in x clipped to 1 and other to 0. Böylece `maske` bir one-hot coding olur.
+            # the max value in x clipped to 1 and other to 0. Böylece `filtre (maske)` bir one-hot coding olur.
             mask = K.clip(x, 0, 1)
 
-        return K.batch_flatten(inputs * mask)  # maskelenmiş girişler, shape = [None, num_capsule * dim_capsule]
+        return K.batch_flatten(inputs * mask)  # filtrelenmişş girişler, shape = [None, num_capsule * dim_capsule]
 
     def compute_output_shape(self, input_shape):
         if type(input_shape[0]) is tuple:  # deoğru değerler sağlanır
@@ -100,7 +100,7 @@ class CapsuleLayer(layers.Layer):
         self.kernel_initializer = initializers.get(kernel_initializer)
 
     def build(self, input_shape):
-        assert len(input_shape) >= 3, "Input Tensorunun olması gereken boyutu shape=[None, input_num_capsule, input_dim_capsule]"
+        assert len(input_shape) >= 3, "Giriş Tensorunun olması gereken boyutu shape=[None, input_num_capsule, input_dim_capsule]"
         self.input_num_capsule = input_shape[1]
         self.input_dim_capsule = input_shape[2]
 
@@ -121,20 +121,20 @@ class CapsuleLayer(layers.Layer):
         # inputs_tiled.shape=[None, num_capsule, input_num_capsule, input_dim_capsule]
         inputs_tiled = K.tile(inputs_expand, [1, self.num_capsule, 1, 1])
 
-        # Compute `inputs * W` by scanning inputs_tiled on dimension 0.
+        # 0 boyutta input_tiled taranarak `inputs * W` hesaplanır.
         # x.shape=[num_capsule, input_num_capsule, input_dim_capsule]
         # W.shape=[num_capsule, input_num_capsule, dim_capsule, input_dim_capsule]
-        # Regard the first two dimensions as `batch` dimension,
-        # then matmul: [input_dim_capsule] x [dim_capsule, input_dim_capsule]^T -> [dim_capsule].
+        # İlk iki boyuta "batch" olarak bakılırsa;
+        # sonra matmul: [input_dim_capsule] x [dim_capsule, input_dim_capsule]^T -> [dim_capsule].
         # inputs_hat.shape = [None, num_capsule, input_num_capsule, dim_capsule]
         inputs_hat = K.map_fn(lambda x: K.batch_dot(x, self.W, [2, 3]), elems=inputs_tiled)
 
         """
-        # Begin: routing algorithm V1, dynamic ------------------------------------------------------------#
-        # The prior for coupling coefficient, initialized as zeros.
+        # başlangıç: dinamik yönlendirme (dynamic routing) algoritması V1 ------------------------------------------------------------#
+        # Birleştime katsayısı (coupling coefficient) başlangıçta 0'dır.
         b = K.zeros(shape=[self.batch_size, self.num_capsule, self.input_num_capsule])
         def body(i, b, outputs):
-            c = tf.nn.softmax(b, dim=1)  # dim=2 is the num_capsule dimension
+            c = tf.nn.softmax(b, dim=1)  # dim=2,  (num_capsule)'nın boyutudur.
             outputs = squash(K.batch_dot(c, inputs_hat, [2, 2]))
             if i != 1:
                 b = b + K.batch_dot(outputs, inputs_hat, [2, 3])
@@ -145,16 +145,16 @@ class CapsuleLayer(layers.Layer):
                             tf.TensorShape([None, self.num_capsule, self.input_num_capsule]),
                             tf.TensorShape([None, self.num_capsule, self.dim_capsule])]
         _, _, outputs = tf.while_loop(cond, body, loop_vars, shape_invariants)
-        # End: routing algorithm V1, dynamic ------------------------------------------------------------#
+        # Son: dinamik yönlendirme (dynamic routing) algoritması V1 ------------------------------------------------------------#
         """
-        # Begin: Routing algorithm ---------------------------------------------------------------------#
-        # In forward pass, `inputs_hat_stopped` = `inputs_hat`;
-        # In backward, no gradient can flow from `inputs_hat_stopped` back to `inputs_hat`.
+        # Başlangıç: Yönlendirme algoritması ---------------------------------------------------------------------#
+        # İleri adım, `inputs_hat_stopped` = `inputs_hat`;
+        # Geriye doğru, gradyan yayılımı olmaz `inputs_hat_stopped` back to `inputs_hat`.
         inputs_hat_stopped = K.stop_gradient(inputs_hat)
         
-        # The prior for coupling coefficient, initialized as zeros.
-        # b.shape = [None, self.num_capsule, self.input_num_capsule]. It's equivalent to
-        # `b=K.zeros(shape=[batch_size, num_capsule, input_num_capsule])`. I just can't get `batch_size`
+        # Birleştime katsayısı (coupling coefficient) başlangıçta 0'dır..
+        # b.shape = [None, self.num_capsule, self.input_num_capsule]. değerine eşittir.
+        # `b=K.zeros(shape=[batch_size, num_capsule, input_num_capsule])`. Sadece `batch_size` alınmıyor.
         b = K.stop_gradient(K.sum(K.zeros_like(inputs_hat), -1))
 
         assert self.num_routing > 0, 'The num_routing should be > 0.'
@@ -162,24 +162,24 @@ class CapsuleLayer(layers.Layer):
             # c.shape=[batch_size, num_capsule, input_num_capsule]
             c = tf.nn.softmax(b, dim=1)
 
-            # At last iteration, use `inputs_hat` to compute `outputs` in order to backpropagate gradient
+            # Son iterasyonda, gradyanı geriye yaymak için ,`inputs_hat` kullanarak `outputs` hesaplanır.
             if i == self.num_routing - 1:
                 # c.shape =  [batch_size, num_capsule, input_num_capsule]
                 # inputs_hat.shape=[None, num_capsule, input_num_capsule, dim_capsule]
-                # The first two dimensions as `batch` dimension,
-                # then matmal: [input_num_capsule] x [input_num_capsule, dim_capsule] -> [dim_capsule].
+                # İlk iki boyut, `batch` boyutudur.
+                # sonra matmal: [input_num_capsule] x [input_num_capsule, dim_capsule] -> [dim_capsule].
                 # outputs.shape=[None, num_capsule, dim_capsule]
-                outputs = squash(K.batch_dot(c, inputs_hat, [2, 2]))  # [None, 10, 16]
-            else:  # Otherwise, use `inputs_hat_stopped` to update `b`. No gradients flow on this path.
+                outputs = squash(K.batch_dot(c, inputs_hat, [2, 2]))  # [yok, 10, 16]
+            else:  # Aksi halede 'b' yi güncellemek için `inputs_hat_stopped` kullanır. Bu yönde (yolda) herhangi bir granyan akışı olmaz.
                 outputs = squash(K.batch_dot(c, inputs_hat_stopped, [2, 2]))
 
                 # outputs.shape =  [None, num_capsule, dim_capsule]
                 # inputs_hat.shape=[None, num_capsule, input_num_capsule, dim_capsule]
-                # The first two dimensions as `batch` dimension,
+                # İlk iki boyut, `batch` boyutudur.
                 # then matmal: [dim_capsule] x [input_num_capsule, dim_capsule]^T -> [input_num_capsule].
                 # b.shape=[batch_size, num_capsule, input_num_capsule]
                 b += K.batch_dot(outputs, inputs_hat_stopped, [2, 3])
-        # End: Routing algorithm -----------------------------------------------------------------------#
+        # Son: Yönlendirme algoritması -----------------------------------------------------------------------#
 
         return outputs
 
@@ -189,10 +189,11 @@ class CapsuleLayer(layers.Layer):
 
 def PrimaryCap(inputs, dim_capsule, n_channels, kernel_size, strides, padding):
     """
-    Apply Conv2D `n_channels` times and concatenate all capsules
-    :param inputs: 4D tensor, shape=[None, width, height, channels]
-    :param dim_capsule: the dim of the output vector of capsule
-    :param n_channels: the number of types of capsules
+    Tüm kapsülleri birbirine bağlamak için Conv2D, `n_channels` kez uygulanır.
+   
+    :param inputs: 4B Tensor, shape=[None, width, height, channels]
+    :param dim_capsule: Çıkış kapsül vektörlerinin boyutu
+    :param n_channels: Kapsül tiplerinin sayısı
     :return: output tensor, shape=[None, num_capsule, dim_capsule]
     """
     output = layers.Conv2D(filters=dim_capsule*n_channels, kernel_size=kernel_size, strides=strides, padding=padding,
@@ -202,8 +203,8 @@ def PrimaryCap(inputs, dim_capsule, n_channels, kernel_size, strides, padding):
 
 
 """
-# The following is another way to implement primary capsule layer. This is much slower.
-# Apply Conv2D `n_channels` times and concatenate all capsules
+# Aşağıda, birincil kapsül katmanını uygulamanın bir başka yolu gösterilmekdir. Bu çok daha yavaştır.
+# Tüm kapsülleri birbirine bağlamak için Conv2D, `n_channels` kez uygulanır.
 def PrimaryCap(inputs, dim_capsule, n_channels, kernel_size, strides, padding):
     outputs = []
     for _ in range(n_channels):
