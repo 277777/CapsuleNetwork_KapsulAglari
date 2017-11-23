@@ -1,8 +1,10 @@
 """
 Deep Learning Türkiye Topluluğu için Merve Ayyüce Kızrak tarafından hazırlanmıştır. (http://www.ayyucekizrak.com/)
 
-Bazı temel katmanlar bir Kapsül Ağ oluşturmak için kullanılır. Kapsül ağ modeli (CapsNet) oluşturmak için kullanılan katmanlar 
-farklı veri setleri üzerinde de kullanılabilir, sadece MNIST seti için tasarlanmamıştır.
+Bazı temel katmanlar (evrişimsel katmanlar) bir Kapsül Ağ oluşturmak için kullanılır. 
+Kapsül ağ modeli (CapsNet) oluşturmak için kullanılan katmanlar farklı veri setleri üzerinde de kullanılabilir, 
+sadece MNIST seti için tasarlanmamıştır.
+
 *NOT*: Bazı fonksiyonlar birden fazla şekilde uygulanabilir. Bunları kendiniz test edebilirsiniz ve yorum olarak ekleyebilirsiniz.
 
 """
@@ -15,9 +17,12 @@ from keras import initializers, layers
 class Length(layers.Layer):
     """
     Vektör uzunluklarının hesaplanır. Bu, hata değerindeki (margin_loss) y_true ile aynı boyutta Tensor hesaplamak için kullanılır.
-    Bu katmanı kullanarak modelin çıkışı direkt olarak etiketleri kestirebilir. ( `y_pred = np.argmax(model.predict(x), 1)` ) kullanarak.
-    girişler    : shape=[None, num_vectors, dim_vector]
-    çıkış       : shape=[None, num_vectors]
+    Bu katmanı kullanarak modelin çıkışı ( `y_pred = np.argmax(model.predict(x), 1)` bu denklem kullanılarak ) 
+    direkt olarak etiketleri kestirebilir. 
+
+    Girişler    : shape=[None, num_vectors, dim_vector]
+    Çıkış       : shape=[None, num_vectors]
+    
     """
     def call(self, inputs, **kwargs):
         return K.sqrt(K.sum(K.square(inputs), -1))
@@ -28,15 +33,15 @@ class Length(layers.Layer):
 
 class Mask(layers.Layer):
     """
-    shape=[None, num_capsule, dim_vector]  Bu Tensor maske ya maksimum uzunluğuyla kapsül ya da ek bir giriş filtresidir.
+    shape=[None, num_capsule, dim_vector]  Bu Tensor filtre ya maksimum uzunluğuyla kapsül ya da ek bir giriş filtresidir.
     
     Maksimum uzunluklu kapsül hariç (yada belirtilen kapsül hariç), diğer tüm vektörler 0'a filtrelenir. 
     Sonra filtrelenmiş tüm Tensörler düzgünleştirilir (flatten).
     
     Örneğin:
         ```
-        x = keras.layers.Input(shape=[8, 3, 2])  # batch_size=8,her bir iterasyonda "8" resim alınsın 
-                                                   her örnek 3 kapsül içersin  dim_vector=2
+        x = keras.layers.Input(shape=[8, 3, 2])  # batch_size=8,her bir iterasyonda "8" resim alınır.
+                                                   her örnek 3 kapsül içerir  (dim_vector=2) vektörün uzunluğu 2'dir.
         y = keras.layers.Input(shape=[8, 3])  # Doğru etiketler. 8 örnek, 3 sınıf, (one-hot coding).
         out = Mask()(x)  # out.shape=[8, 6]
         # ya da
@@ -44,23 +49,23 @@ class Mask(layers.Layer):
         `
     """
     def call(self, inputs, **kwargs):
-        if type(inputs) is list:  # doğru etiket shape = [batch_size, n_classes], ile sağlanı.  (örneğin: one-hot code.)
+        if type(inputs) is list:  # doğru etiket shape = [batch_size, n_classes], ile sağlanır.  (örneğin: one-hot code.)
             assert len(inputs) == 2
             inputs, mask = inputs
             mask = K.expand_dims(mask, -1)
-        else:  # eğer doğru etiket yoksa, kapsüller maksimum uzunluklarıyla filtrelenir. Temel olrak kestirim için kullanılır.
+        else:  # eğer doğru etiket yoksa, kapsüller maksimum uzunluklarıyla filtrelenir. Temel olarak kestirim için kullanılır.
             # kapsül uzunluğu hesaplanır.
             x = K.sqrt(K.sum(K.square(inputs), -1, True))
             # x aralığını max(new_x[i,:])=1 ve diğerleri << 0 yapmak için büyütür. 
             x = (x - K.max(x, 1, True)) / K.epsilon() + 1
             # x'teki bu maksimum değer 1 yapılır diğerleri 0 yapılır.
-            # the max value in x clipped to 1 and other to 0. Böylece `filtre (maske)` bir one-hot coding olur.
+            # x'deki maksümum değer 1'e, diğerleri 0 olacak şekilde bölünür (clipped). Böylece `filtre (maske)` bir one-hot coding olur.
             mask = K.clip(x, 0, 1)
 
-        return K.batch_flatten(inputs * mask)  # filtrelenmişş girişler, shape = [None, num_capsule * dim_capsule]
+        return K.batch_flatten(inputs * mask)  # filtrelenmiş girişler, shape = [None, num_capsule * dim_capsule]
 
     def compute_output_shape(self, input_shape):
-        if type(input_shape[0]) is tuple:  # deoğru değerler sağlanır
+        if type(input_shape[0]) is tuple:  # doğru değerler sağlanır
             return tuple([None, input_shape[0][1] * input_shape[0][2]])
         else:  # doğru olmayan değerler sağlanır
             return tuple([None, input_shape[1] * input_shape[2]])
@@ -69,6 +74,7 @@ class Mask(layers.Layer):
 def squash(vectors, axis=-1):
     """
     Kapsülde lineer olmayan aktivasyon kullanılır. Böylece büyük vektörün uzunluğu 1'e küçük vektör 0'a yaklaşır.
+    
     :param vectors: bazı vektörler ezilir (squashed), N-dim tensor
     :param axis: eksen ezilir (squash)
     :return: giriş vektörleri ile aynı uzunluklu bir Tensor
@@ -80,11 +86,11 @@ def squash(vectors, axis=-1):
 
 class CapsuleLayer(layers.Layer):
     """
-    Kapsül Katmanı. Dense katmanıyla benzerdir. Dense katmanı `in_num` girişlere sahiptir. Her biri skalardır. önceki katmandan 
+    Kapsül Katmanı. Yoğun (Dense) katmanıyla benzerdir. Dense katmanı `in_num` girişlere sahiptir. Her biri skalardır. önceki katmandan 
     gelen nöron çıkıştır. Çıkış nöronları `out_num` ile gösterilir. Kapsül katmanı (CapsuleLayer) çıkış nöronlarının genişletilmiş
     skalar bir vektör halidir.
     Giriş: shape = [None, input_num_capsule, input_dim_capsule] and output shape = \
-    [None, num_capsule, dim_capsule]. Dense katman için, input_dim_capsule = dim_capsule = 1.
+    [None, num_capsule, dim_capsule]. Yoğun (Dense) katman için, input_dim_capsule = dim_capsule = 1.
     
     :param num_capsule: her katmandaki kapsül sayısı 
     :param dim_capsule: ilgili katmandaki kapsülün çıkış vektörünün boyutu 
@@ -130,7 +136,8 @@ class CapsuleLayer(layers.Layer):
         inputs_hat = K.map_fn(lambda x: K.batch_dot(x, self.W, [2, 3]), elems=inputs_tiled)
 
         """
-        # başlangıç: dinamik yönlendirme (dynamic routing) algoritması V1 ------------------------------------------------------------#
+        # Başlangıç: dinamik yönlendirme (dynamic routing) algoritması V1 ------------------------------------------------------------#
+        
         # Birleştime katsayısı (coupling coefficient) başlangıçta 0'dır.
         b = K.zeros(shape=[self.batch_size, self.num_capsule, self.input_num_capsule])
         def body(i, b, outputs):
@@ -145,11 +152,12 @@ class CapsuleLayer(layers.Layer):
                             tf.TensorShape([None, self.num_capsule, self.input_num_capsule]),
                             tf.TensorShape([None, self.num_capsule, self.dim_capsule])]
         _, _, outputs = tf.while_loop(cond, body, loop_vars, shape_invariants)
+        
         # Son: dinamik yönlendirme (dynamic routing) algoritması V1 ------------------------------------------------------------#
         """
         # Başlangıç: Yönlendirme algoritması ---------------------------------------------------------------------#
         # İleri adım, `inputs_hat_stopped` = `inputs_hat`;
-        # Geriye doğru, gradyan yayılımı olmaz `inputs_hat_stopped` back to `inputs_hat`.
+        # `inputs_hat_stopped`'dan `inputs_hat`'ya Geriye doğru, gradyan yayılımı olmaz.
         inputs_hat_stopped = K.stop_gradient(inputs_hat)
         
         # Birleştime katsayısı (coupling coefficient) başlangıçta 0'dır..
@@ -200,7 +208,6 @@ def PrimaryCap(inputs, dim_capsule, n_channels, kernel_size, strides, padding):
                            name='primarycap_conv2d')(inputs)
     outputs = layers.Reshape(target_shape=[-1, dim_capsule], name='primarycap_reshape')(output)
     return layers.Lambda(squash, name='primarycap_squash')(outputs)
-
 
 """
 # Aşağıda, birincil kapsül katmanını uygulamanın bir başka yolu gösterilmekdir. Bu çok daha yavaştır.
