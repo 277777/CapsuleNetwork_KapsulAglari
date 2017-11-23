@@ -2,14 +2,14 @@
 """
 Deep Learning Türkiye Topluluğu için Merve Ayyüce Kızrak tarafından hazırlanmıştır. (http://www.ayyucekizrak.com/)
 
-Hinton’ın “Dynamic Routing Between Capsules” makalesindeki CapsNet algoritmasının Keras Uygulamasıdır.
+Prof. Geoffrey Hinton’ın “Dynamic Routing Between Capsules” makalesindeki CapsNet algoritmasının Keras Uygulamasıdır.
 Geçerli sürümü TensorFlow’da hazırlanmıştır. Keras sürümünden farklı sürümlere kolaylıkla dönüştürülüp yeniden yazılabilir.
 
 Amaç                        :Kapsül ağının el yazısı rakamları tanımaktaki performansını değerlendirmek.
 Kaynak                      :https://arxiv.org/pdf/1710.09829.pdf (Dynamic Routing Between Capsule)
 Veriseti                    :MNIST (http://yann.lecun.com/exdb/mnist/)
 Algoritma                   :Kapsül Ağları (Capsule Networks-CapsNet)
-Microsoft Azure Notebook    :https://notebooks.azure.com/deeplearningturkiye/libraries/pratik-derin-ogrenme/html/kapsul_rakam_tanima_CapsNet-Keras_MNIST.py
+Microsoft Azure Notebook    :https://notebooks.azure.com/deeplearningturkiye/libraries/pratik-derin-ogrenme/...
 
 Kullanım:
        python CapsNet.py
@@ -20,9 +20,7 @@ Kullanım:
 Sonuç:
        Validasyon Başarımı > 20 epoch sonrasında %99.5. 
        50 epoch sonrasında %99.66’ya yükselmektedir.
-       Her epoch işlemi tek bir GTX1070 GPU kart üzerinde 110 saniye sürmektedir.
-
-    
+       Her epoch işlemi tek bir GTX1070 GPU kart üzerinde 110 saniye sürmektedir.      
 """
 
 import numpy as np
@@ -65,7 +63,7 @@ def CapsNet(input_shape, n_class, num_routing):
     # Kodçözücü Ağ.
     y = layers.Input(shape=(n_class,))
     masked_by_y = Mask()([digitcaps, y])  # Doğru etiket, kapsül katmanın çıkışını maskelemek için kullanılır (Eğitim için).
-    masked = Mask()(digitcaps)  # Maske, kapsülün maksimal uzunluğu ile kullanılır (Kestirim için). 
+    masked = Mask()(digitcaps)  # Filtre (maske), kapsülün maksimal uzunluğu ile kullanılır (Kestirim için). 
 
     # Eğitim ve Kestirimde Kodçözücü Modelin Paylaşımı
     decoder = models.Sequential(name='decoder')
@@ -115,7 +113,7 @@ def train(model, data, args):
                                            save_best_only=True, save_weights_only=True, verbose=1)
     lr_decay = callbacks.LearningRateScheduler(schedule=lambda epoch: args.lr * (0.9 ** epoch))
 
-    # Modelin Derlenir
+    # Model Derlenir
     model.compile(optimizer=optimizers.Adam(lr=args.lr),
                   loss=[margin_loss, 'mse'],
                   loss_weights=[1., args.lam_recon],
